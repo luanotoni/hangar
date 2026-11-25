@@ -88,6 +88,24 @@ export function applyTheme(seeds, persist = true) {
   const r = document.documentElement.style;
   for (const [k, v] of Object.entries(seeds)) r.setProperty(`--seed-${k}`, v);
   if (persist) try { localStorage.setItem("hangar-tema", JSON.stringify(seeds)); } catch { /* sem storage: só pisca */ }
+  themeFavicon();
+}
+/** Favicon da logo nas cores calculadas do tema ativo (estrutura + destaque); logo.svg fica com as do Cabine. */
+function themeFavicon() {
+  const link = document.querySelector('link[rel="icon"]');
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!link || !ctx) return;
+  const probe = document.documentElement.appendChild(document.createElement("i"));
+  const hex = (token) => {
+    probe.style.color = `var(${token})`;
+    ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = getComputedStyle(probe).color; ctx.fillRect(0, 0, 1, 1);
+    return "#" + [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)].map((n) => n.toString(16).padStart(2, "0")).join("");
+  };
+  const [field, accent] = [hex("--color-field"), hex("--color-accent")];
+  probe.remove();
+  const nave = "M32 21 42 50 32 45 22 50Z";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><mask id="h"><path fill="#fff" d="M0 0h64v64H0z"/><path d="${nave}" stroke="#000" stroke-width="6" stroke-linejoin="round"/></mask><path mask="url(#h)" fill="${field}" fill-rule="evenodd" d="M4 56V38a28 28 0 0 1 56 0v18ZM19 56V42a13 13 0 0 1 26 0v14Z"/><path fill="${accent}" d="${nave}"/></svg>`;
+  link.href = "data:image/svg+xml," + encodeURIComponent(svg);
 }
 export function areaColor(id) {
   const i = (state.cfg?.areas || []).findIndex((a) => a.id === id);
