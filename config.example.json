@@ -130,6 +130,7 @@
         "foco": "facilitar a entrada de gente nova no time"
       }
     ],
-    "mostrar_descartadas": false
+    "mostrar_descartadas": false,
+    "checar_cards": true
   }
 }

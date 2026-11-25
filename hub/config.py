@@ -120,6 +120,7 @@ DEFAULTS = {
         "foco_padrao": "melhorias gerais no meu trabalho",
         "focos": [],  # [{"rotulo": "...", "foco": "..."}]
         "mostrar_descartadas": False,  # padrão do quadro; o que você marcar na aba fica lembrado no navegador
+        "checar_cards": True,  # consulta no GitHub (gh, só leitura) se os cards citados no campo card já fecharam
     },
 }
 

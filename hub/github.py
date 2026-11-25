@@ -1,6 +1,8 @@
-"""GitHub pelo gh CLI, só leitura: cards atribuídos a mim (com os campos do Project) e PRs."""
+"""GitHub pelo gh CLI, só leitura: cards atribuídos a mim (com os campos do Project), PRs e o estado dos cards das ideias."""
 import json
+import re
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config
@@ -89,3 +91,75 @@ def fetch():
         return {"cards": [_card(n, project) for n in cards.result() if n],
                 "reviews": [_pr(n) for n in review.result() if n],
                 "mine": [_pr(n) for n in mine.result() if n]}
+
+
+# ---------- estado dos cards citados nas ideias (só leitura) ----------
+_REF = re.compile(r"(?<![\w/.-])(?:([\w.-]+)/)?([\w.-]+)#(\d+)")
+_cards_cache = {"key": None, "at": 0.0, "data": None}
+CARDS_TTL = 300
+
+
+def card_refs(text):
+    """Referências `repo#123` ou `dono/repo#123` do campo card; `#123` sozinho fica de fora (não diz o repo)."""
+    org = config.get()["trabalho"]["github_org"].strip()
+    refs = []
+    for owner, repo, num in _REF.findall(text or ""):
+        owner = owner or org
+        if owner and (owner, repo, int(num)) not in refs:
+            refs.append((owner, repo, int(num)))
+    return refs
+
+
+def card_states(refs):
+    """{"dono/repo#n": {kind, state, title, url}} em uma consulta só; cache de 5 minutos para o mesmo conjunto."""
+    key = tuple(sorted(refs))
+    if not key:
+        return {}
+    c = _cards_cache
+    if c["key"] == key and time.time() - c["at"] < CARDS_TTL:
+        return c["data"]
+    parts = [f'r{k}: repository(owner: {json.dumps(o)}, name: {json.dumps(r)}) {{ issueOrPullRequest(number: {n}) {{'
+             " __typename ... on Issue { state stateReason title url } ... on PullRequest { state title url } } }"
+             for k, (o, r, n) in enumerate(key)]
+    try:
+        out = subprocess.run(["gh", "api", "graphql", "-f", "query={ " + " ".join(parts) + " }"],
+                             capture_output=True, text=True, timeout=40)
+    except FileNotFoundError as e:
+        raise SourceError("O gh não está instalado.") from e
+    except subprocess.TimeoutExpired as e:
+        raise SourceError("O GitHub demorou demais para responder.") from e
+    try:
+        data = json.loads(out.stdout or "{}").get("data") or {}
+    except ValueError:
+        data = {}
+    if out.returncode != 0 and not data:
+        msg = (out.stderr or "").strip().splitlines()[-1:] or ["erro desconhecido"]
+        raise SourceError("O GitHub recusou a leitura: " + msg[0][:200])
+    res = {}
+    for k, (o, r, n) in enumerate(key):
+        node = ((data.get(f"r{k}") or {}).get("issueOrPullRequest")) or None
+        ref = f"{o}/{r}#{n}"
+        if not node:
+            res[ref] = {"kind": None, "state": "UNKNOWN", "title": None, "url": None}
+            continue
+        state = node["state"]
+        if state == "CLOSED" and node.get("stateReason") == "NOT_PLANNED":
+            state = "NOT_PLANNED"
+        res[ref] = {"kind": "pr" if node["__typename"] == "PullRequest" else "issue", "state": state,
+                    "title": node.get("title"), "url": node.get("url")}
+    c.update(key=key, at=time.time(), data=res)
+    return res
+
+
+def ideias_cards(items):
+    """Por ideia com card: as referências com o estado e `done` (todas fechadas ou mergeadas)."""
+    per = {i["id"]: card_refs(i.get("card")) for i in items if i.get("card")}
+    per = {k: v for k, v in per.items() if v}
+    states = card_states([r for refs in per.values() for r in refs])
+    out = {}
+    for iid, refs in per.items():
+        rows = [{"ref": f"{o}/{r}#{n}", "short": f"{r}#{n}", **states.get(f"{o}/{r}#{n}", {"state": "UNKNOWN"})}
+                for o, r, n in refs]
+        known = [x for x in rows if x["state"] != "UNKNOWN"]
+        out[iid] = {"refs": rows, "done": bool(known) and all(x["state"] in ("CLOSED", "MERGED", "NOT_PLANNED") for x in known)}
+    return out

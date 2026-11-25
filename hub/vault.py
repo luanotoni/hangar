@@ -169,7 +169,7 @@ def _render_ideias(head, sections):
 #   texto livre (explorações, decisões…)
 #   #### Observações  seguido de "- dd/mm: texto", uma por linha
 # Editar mexe só no trecho que mudou; o resto do bloco fica como está.
-META_KEYS = ("área", "impacto", "esforço", "origem", "card", "arquivada")
+META_KEYS = ("área", "impacto", "esforço", "origem", "card", "fechada", "arquivada")
 _META = re.compile(r"^- \*\*(" + "|".join(META_KEYS) + r")\*\*: (.+)$")
 FIELDS = (("problem", "Problema"), ("proposal", "Proposta"), ("firstStep", "Primeiro passo"))
 _FIELD = re.compile(r"^\*\*(" + "|".join(lbl for _, lbl in FIELDS) + r"):\*\*\s*(.*)$")
@@ -273,7 +273,8 @@ def ideias():
             out.append({"id": _hid(b["title"]), "rev": _rev(b), "stage": stage, "title": b["title"],
                         "text": _rest_text(segs), "obs": obs,
                         "area": meta.get("área"), "impact": meta.get("impacto"), "effort": meta.get("esforço"),
-                        "origin": meta.get("origem"), "card": meta.get("card"), "archived": meta.get("arquivada"),
+                        "origin": meta.get("origem"), "card": meta.get("card"), "closed": meta.get("fechada"),
+                        "archived": meta.get("arquivada"),
                         **{k: fields.get(k) for k, _ in FIELDS}})
     return {"stages": list(sections.keys()), "items": out}
 
@@ -444,6 +445,15 @@ def ideia_archive(body):
         _set_meta(segs, "arquivada", _ddmm() if body.get("on", True) else "")
         b["body"] = _flat(segs)
     _change(body, arch)
+
+
+def ideia_close(body):
+    """Fecha (o card ficou pronto: `- **fechada**: dd/mm`, sai do quadro) ou reabre a ideia."""
+    def close(sections, stage, b):
+        segs = _segments(b["body"])
+        _set_meta(segs, "fechada", _ddmm() if body.get("on", True) else "")
+        b["body"] = _flat(segs)
+    _change(body, close)
 
 
 def ideia_delete(body):

@@ -491,6 +491,15 @@ input[type="checkbox"]:checked::after { opacity: 1; }
   .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .trab-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* fechar ideia quando o card fica pronto */
+.tag-done { display: inline-flex; align-items: center; gap: 3px; color: var(--color-success, var(--color-field)); border-color: color-mix(in oklch, var(--color-success, var(--color-field)) 45%, transparent); }
+.tag-done svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+.idea.is-closed { opacity: 0.6; }
+.lane-act { justify-self: start; }
+.idd-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); font-size: var(--text-sm); }
+.idd-cstate { display: inline-block; min-width: 5.5rem; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-muted); }
+.idd-cards .is-closed .idd-cstate, .idd-cards .is-merged .idd-cstate { color: var(--color-success, var(--color-field)); }
+.idd-cards .is-open .idd-cstate { color: var(--color-warn, var(--color-ink-2)); }
 @media (max-width: 72rem) {
   .ag-radar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ag-prazos { grid-column: 1 / -1; }

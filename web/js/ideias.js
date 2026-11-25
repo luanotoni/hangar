@@ -1,4 +1,4 @@
-// Aba Ideias: quadro por estágio, filtros, painel de detalhes com edição, observações, arquivar e excluir.
+// Aba Ideias: quadro por estágio, filtros, painel de detalhes com edição, observações, fechar (card pronto), arquivar e excluir.
 import { $, $$, state, api, busy, toast, esc, md, icon, pref } from "./core.js";
 
 const NEXT = { "Ideia": "Explorando", "Explorando": "Proposta", "Proposta": "Virou card" };
@@ -7,10 +7,11 @@ const FIELDS = [["problem", "Problema"], ["proposal", "Proposta"], ["firstStep",
 const LEVELS = ["baixo", "médio", "alto"];
 const ICON_EDIT = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z M9 4l3 3"/></svg>';
 const ICON_OBS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>';
+const ICON_DONE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg>';
 const ICON_BOX = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12v3H2zM3 6.5v6h10v-6M6.5 9h3"/></svg>';
 
 /* ---------- filtros (lembrados neste navegador, menos a busca) ---------- */
-const F = { q: "", areas: [], stages: [], descartadas: null, arquivadas: false };
+const F = { q: "", areas: [], stages: [], descartadas: null, arquivadas: false, fechadas: false };
 function loadFilters() { Object.assign(F, pref("ideiasFiltros") || {}, { q: "" }); }
 function saveFilters() { const { q, ...rest } = F; pref("ideiasFiltros", rest); }
 const showDiscarded = () => F.descartadas ?? !!state.cfg?.ideias?.mostrar_descartadas;
@@ -18,6 +19,15 @@ const toggle = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...a
 const norm = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 const items = () => state.vault?.ideias?.items || [];
+/* estado dos cards citados (GitHub, só leitura): { id: { refs: [{ short, state, url, title, kind }], done } } */
+let CARDS = { cards: {} };
+const cardInfo = (i) => CARDS.cards?.[i.id];
+const cardDone = (i) => !i.closed && !!cardInfo(i)?.done;
+const STATE_TXT = { OPEN: "aberto", CLOSED: "fechado", MERGED: "mergeada", NOT_PLANNED: "fechado sem fazer", UNKNOWN: "não achei" };
+async function loadCards() {
+  try { CARDS = await api("/api/ideias/cards"); } catch (e) { CARDS = { error: e.message, cards: {} }; }
+  if (state.view === "ideias") renderIdeias();
+}
 const byId = (id) => items().find((i) => i.id === id);
 function areaColor(a) {
   const list = state.cfg?.ideias?.areas || [];
@@ -27,6 +37,7 @@ function areaColor(a) {
 const quick = (i) => norm(i.impact) === "alto" && norm(i.effort) === "baixo";
 function matches(i) {
   if (!F.arquivadas && i.archived) return false;
+  if (!F.fechadas && i.closed) return false;
   if (F.areas.length && !F.areas.includes(i.area || "")) return false;
   if (!F.q.trim()) return true;
   const hay = norm([i.title, i.area, i.card, i.problem, i.proposal, i.firstStep, i.text, ...(i.obs || []).map((o) => o.text)].join(" "));
@@ -38,14 +49,16 @@ function cardHTML(i, stages) {
   const si = stages.indexOf(i.stage);
   const prev = i.problem || i.proposal || i.text || "";
   const n = (i.obs || []).length;
-  return `<article class="idea${i.archived ? " is-archived" : ""}" data-idea="${i.id}" draggable="true" style="--lc:${areaColor(i.area)}">
+  const done = cardDone(i);
+  return `<article class="idea${i.archived ? " is-archived" : ""}${i.closed ? " is-closed" : ""}" data-idea="${i.id}" draggable="true" style="--lc:${areaColor(i.area)}">
     <button type="button" class="idea-open" data-open-idea="${i.id}" aria-haspopup="dialog">${esc(i.title)}</button>
     <p class="chips-s">${i.area ? `<span class="idea-area"><span class="ag-dot" aria-hidden="true"></span>${esc(i.area)}</span>` : ""}${i.impact ? `<span>impacto ${esc(i.impact)}</span>` : ""}${i.effort ? `<span>esforço ${esc(i.effort)}</span>` : ""}${quick(i) ? `<span class="ag-kind">ganho rápido</span>` : ""}</p>
     ${prev ? `<p class="idea-prev">${esc(prev.replace(/\*\*/g, "").replace(/\s+/g, " ").slice(0, 220))}</p>` : ""}
     <div class="idea-foot">
-      <span class="idea-inds">${n ? `<span class="ag-ind num" title="${n} ${n === 1 ? "observação" : "observações"}">${ICON_OBS}${n}</span>` : ""}${i.card ? `<span class="tag" title="${esc(i.card)}">${esc(i.card.split(/[\s(,]/)[0])}</span>` : ""}${i.archived ? `<span class="tag">arquivada</span>` : ""}</span>
+      <span class="idea-inds">${n ? `<span class="ag-ind num" title="${n} ${n === 1 ? "observação" : "observações"}">${ICON_OBS}${n}</span>` : ""}${i.card ? `<span class="tag" title="${esc(i.card)}">${esc(i.card.split(/[\s(,]/)[0])}</span>` : ""}${done ? `<span class="tag tag-done" title="Todos os cards citados já fecharam ou foram mergeados">${ICON_DONE}card pronto</span>` : ""}${i.closed ? `<span class="tag tag-done">${ICON_DONE}fechada ${esc(i.closed)}</span>` : ""}${i.archived ? `<span class="tag">arquivada</span>` : ""}</span>
       <span class="idea-tools">
         ${si > 0 && i.stage !== DISCARD ? `<button type="button" class="btn btn-text btn-icon" data-move="${esc(stages[si - 1])}" aria-label="Voltar para ${esc(stages[si - 1])}" title="Voltar para ${esc(stages[si - 1])}">${icon.left}</button>` : ""}
+        ${done ? `<button type="button" class="btn btn-ghost btn-sm" data-close-idea="${i.id}" title="O card ficou pronto: a ideia sai do quadro e fica na nota como fechada">${ICON_DONE} Fechar</button>` : ""}
         ${NEXT[i.stage] ? `<button type="button" class="btn btn-ghost btn-sm" data-move="${esc(NEXT[i.stage])}">${esc(NEXT[i.stage])} ${icon.right}</button>` : ""}
         ${i.stage === DISCARD ? `<button type="button" class="btn btn-ghost btn-sm" data-move="Ideia">Reabrir</button>` : ""}
       </span>
@@ -61,16 +74,19 @@ function renderFilters(all) {
   const stages = (state.vault?.ideias?.stages || []).filter((s) => s !== DISCARD);
   const nDisc = all.filter((i) => i.stage === DISCARD).length;
   const nArch = all.filter((i) => i.archived).length;
+  const nClosed = all.filter((i) => i.closed).length;
   const chip = (attr, val, on, label, extra = "") => `<button type="button" class="chip${on ? " is-on" : ""}" ${attr}="${esc(val)}" aria-pressed="${on}"${extra}>${label}</button>`;
-  const ativos = F.areas.length || F.stages.length || F.q || F.arquivadas || F.descartadas !== null;
+  const ativos = F.areas.length || F.stages.length || F.q || F.arquivadas || F.fechadas || F.descartadas !== null;
   const qFocused = document.activeElement?.id === "id-q";
   el.innerHTML = `
     <div class="ag-frow">
       <label class="ag-search"><span class="visually-hidden">Buscar nas ideias</span><input type="search" id="id-q" placeholder="Buscar (/)" value="${esc(F.q)}" autocomplete="off"></label>
       <label class="ag-toggle"><input type="checkbox" id="id-desc"${showDiscarded() ? " checked" : ""}> descartadas <span class="count num">${nDisc}</span></label>
+      <label class="ag-toggle"><input type="checkbox" id="id-fech"${F.fechadas ? " checked" : ""}> fechadas <span class="count num">${nClosed}</span></label>
       <label class="ag-toggle"><input type="checkbox" id="id-arq"${F.arquivadas ? " checked" : ""}> arquivadas <span class="count num">${nArch}</span></label>
       ${ativos ? `<button type="button" class="btn btn-text btn-sm" data-iclear>Limpar filtros</button>` : ""}
     </div>
+    ${CARDS.error ? `<p class="muted small">Não consegui ver o estado dos cards no GitHub: ${esc(CARDS.error)}</p>` : ""}
     <div class="ag-frow" role="group" aria-label="Estágios"><span class="ag-flabel">Estágios</span>${stages.map((s) => chip("data-fstage", s, F.stages.includes(s), esc(s))).join("")}</div>
     ${areas.length > 1 ? `<div class="ag-frow" role="group" aria-label="Áreas"><span class="ag-flabel">Áreas</span>${areas.map((a) => chip("data-farea", a, F.areas.includes(a), `<span class="ag-dot" aria-hidden="true"></span>${esc(a || "Sem área")}`, ` style="--lc:${areaColor(a)}"`)).join("")}</div>` : ""}`;
   if (qFocused) { const q = $("#id-q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
@@ -93,9 +109,11 @@ export function renderIdeias() {
   const filtering = F.q.trim() || F.areas.length;
   board.innerHTML = lanes.map((st) => {
     const list = all.filter((i) => i.stage === st && matches(i));
-    const total = all.filter((i) => i.stage === st && (F.arquivadas || !i.archived)).length;
+    const total = all.filter((i) => i.stage === st && (F.arquivadas || !i.archived) && (F.fechadas || !i.closed)).length;
+    const prontas = list.filter(cardDone);
     const empty = filtering && total ? "Nada com esses filtros." : st === "Ideia" ? "Peça sugestões acima ou anote uma ideia sua." : "Vazio. Arraste uma ideia para cá.";
     return `<section class="lane${st === DISCARD ? " is-muted" : ""}" data-lane="${esc(st)}" aria-label="${esc(st)}"><h2>${esc(st)} <span class="count num">${filtering ? `${list.length} de ${total}` : list.length}</span></h2>
+      ${prontas.length > 1 ? `<button type="button" class="btn btn-ghost btn-sm lane-act" data-close-all="${prontas.map((i) => i.id).join(",")}">${ICON_DONE} Fechar as ${prontas.length} com card pronto</button>` : ""}
       ${list.map((i) => cardHTML(i, stages)).join("") || `<p class="empty">${empty}</p>`}
     </section>`;
   }).join("");
@@ -131,7 +149,12 @@ function editHTML(i) {
 function viewHTML(i, stages) {
   const chips = [i.impact ? `<span class="tag">impacto ${esc(i.impact)}</span>` : "", i.effort ? `<span class="tag">esforço ${esc(i.effort)}</span>` : "",
     quick(i) ? `<span class="ag-kind">ganho rápido</span>` : "", i.card ? `<span class="tag">card ${esc(i.card)}</span>` : "",
+    i.closed ? `<span class="tag tag-done">${ICON_DONE}fechada em ${esc(i.closed)}</span>` : "",
     i.archived ? `<span class="tag">arquivada em ${esc(i.archived)}</span>` : ""].filter(Boolean).join("");
+  const ci = cardInfo(i);
+  const cardSec = ci?.refs?.length ? `<section class="drawer-sec"><h3>Cards no GitHub</h3><ul class="idd-cards">${ci.refs.map((r) =>
+    `<li class="is-${r.state.toLowerCase()}"><span class="idd-cstate">${STATE_TXT[r.state] || esc(r.state)}</span> ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.short)}</a>` : esc(r.short)}${r.title ? ` <span class="muted">${esc(r.title)}</span>` : ""}</li>`).join("")}</ul>
+    ${cardDone(i) ? `<p class="small">Todos já fecharam. Dá para fechar a ideia: ela sai do quadro e fica na nota.</p>` : ""}</section>` : "";
   const secs = FIELDS.filter(([k]) => i[k]).map(([k, l]) => `<section class="drawer-sec"><h3>${l}</h3><div class="drawer-md">${md(i[k])}</div></section>`).join("");
   const obs = i.obs || [];
   return `<div class="drawer-title"><h2 id="idd-h" class="drawer-t">${esc(i.title)}</h2>
@@ -139,6 +162,7 @@ function viewHTML(i, stages) {
     ${chips ? `<div class="drawer-chips">${chips}</div>` : ""}
     <div class="drawer-kind"><span id="idd-stage">Estágio</span><div class="seg seg-sm idd-stages" role="radiogroup" aria-labelledby="idd-stage">${stages.map((s) =>
       `<button type="button" role="radio" data-stage="${esc(s)}" aria-checked="${s === i.stage}">${esc(s)}</button>`).join("")}</div></div>
+    ${cardSec}
     ${secs}
     ${i.text ? `<section class="drawer-sec"><h3>Notas</h3><div class="drawer-md">${md(i.text)}</div></section>` : ""}
     ${!secs && !i.text ? `<button type="button" class="drawer-add-note" data-edit>+ Escrever problema, proposta e primeiro passo</button>` : ""}
@@ -158,6 +182,7 @@ function footHTML(i) {
       <button type="button" class="btn btn-danger-solid btn-sm" data-act="del-yes">Excluir de vez</button>
       <button type="button" class="btn btn-text btn-sm" data-act="del-no">Cancelar</button></footer>`;
   return `<footer class="drawer-f">
+      ${i.closed || cardDone(i) || i.stage === "Virou card" ? `<button type="button" class="btn ${cardDone(i) ? "btn-primary" : "btn-text"} btn-sm" data-act="close" title="${i.closed ? "Volta para o quadro" : "O card ficou pronto: sai do quadro e fica na nota como fechada"}">${ICON_DONE} ${i.closed ? "Reabrir" : "Fechar ideia"}</button>` : ""}
       ${i.stage !== DISCARD ? `<button type="button" class="btn btn-text btn-sm" data-act="discard">Descartar</button>` : ""}
       <button type="button" class="btn btn-text btn-sm" data-act="archive" title="${i.archived ? "Volta para o quadro" : "Some do quadro e continua na nota"}">${ICON_BOX} ${i.archived ? "Desarquivar" : "Arquivar"}</button>
       ${i.stage === DISCARD ? `<button type="button" class="btn btn-text btn-sm btn-danger" data-act="del">Excluir de vez</button>` : ""}
@@ -188,6 +213,13 @@ function setEditing(on) {
 }
 
 /* ---------- ações ---------- */
+async function closeIdeas(ids, on, btn) {
+  return busy(btn, async () => {
+    for (const id of ids) await api("/api/ideia/close", { id, on });
+    toast(!on ? "Ideia de volta ao quadro." : ids.length > 1 ? `${ids.length} ideias fechadas: continuam na nota, fora do quadro.` : "Fechada: continua na nota, fora do quadro.");
+    await A.reload(); return true;
+  });
+}
 async function move(id, stage, btn) {
   return busy(btn, async () => { await api("/api/ideia/move", { id, stage }); await A.reload(); return true; });
 }
@@ -225,16 +257,19 @@ async function act(i, name, btn) {
     await busy(btn, async () => { await api("/api/ideia/archive", { id: i.id, on: !i.archived }); toast(i.archived ? "Ideia de volta ao quadro." : "Arquivada: continua na nota, fora do quadro."); await A.reload(); });
     return;
   }
+  if (name === "close") { await closeIdeas([i.id], !i.closed, btn); return; }
   if (name === "discard") await move(i.id, DISCARD, btn);
 }
 
 export function bindIdeias({ ask, reload }) {
-  A = { reload }; loadFilters();
+  A = { reload: async () => { await reload(); loadCards(); } }; loadFilters(); loadCards();
   const view = $('.view[data-view="ideias"]');
   const board = $("#board");
   board.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-move]");
     if (b) { move(b.closest("[data-idea]").dataset.idea, b.dataset.move, b); return; }
+    const c = e.target.closest("button[data-close-idea]"); if (c) { closeIdeas([c.dataset.closeIdea], true, c); return; }
+    const all = e.target.closest("button[data-close-all]"); if (all) { closeIdeas(all.dataset.closeAll.split(","), true, all); return; }
     const o = e.target.closest("[data-idea]");
     if (o && !e.target.closest("a, button:not([data-open-idea])")) openIdea(o.dataset.idea);
   });
@@ -259,12 +294,13 @@ export function bindIdeias({ ask, reload }) {
   view.addEventListener("click", (e) => {
     const s = e.target.closest("[data-fstage]"); if (s) { F.stages = toggle(F.stages, s.dataset.fstage); saveFilters(); renderIdeias(); return; }
     const a = e.target.closest("[data-farea]"); if (a) { F.areas = toggle(F.areas, a.dataset.farea); saveFilters(); renderIdeias(); return; }
-    if (e.target.closest("[data-iclear]")) { Object.assign(F, { q: "", areas: [], stages: [], descartadas: null, arquivadas: false }); saveFilters(); renderIdeias(); }
+    if (e.target.closest("[data-iclear]")) { Object.assign(F, { q: "", areas: [], stages: [], descartadas: null, arquivadas: false, fechadas: false }); saveFilters(); renderIdeias(); }
   });
   view.addEventListener("input", (e) => { if (e.target.id === "id-q") { F.q = e.target.value; renderIdeias(); } });
   view.addEventListener("change", (e) => {
     if (e.target.id === "id-desc") { F.descartadas = e.target.checked; saveFilters(); renderIdeias(); }
     if (e.target.id === "id-arq") { F.arquivadas = e.target.checked; saveFilters(); renderIdeias(); }
+    if (e.target.id === "id-fech") { F.fechadas = e.target.checked; saveFilters(); renderIdeias(); }
   });
   // painel
   const d = dlg();

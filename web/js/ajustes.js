@@ -103,6 +103,7 @@ const SCHEMA = [
     ["ideias.foco_padrao", "Foco padrão", "text", ""],
     ["ideias.focos", "Focos prontos", "focos", "Um por linha: Rótulo | foco completo."],
     ["ideias.mostrar_descartadas", "Mostrar as descartadas no quadro", "bool", "Padrão da aba Ideias. O que você marcar lá fica lembrado neste navegador."],
+    ["ideias.checar_cards", "Ver se o card da ideia já fechou", "bool", "Lê no GitHub (pelo gh, só leitura) as referências repo#123 do campo Card. Quando todas fecharam, a ideia mostra 'card pronto' e o botão Fechar."],
   ]],
 ];
 
