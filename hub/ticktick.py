@@ -16,6 +16,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from . import config
 from .store import SourceError
@@ -233,6 +234,49 @@ def _shift(obj, days):
         raise SourceError("Essa tarefa não tem data para empurrar.")
 
 
+def _parse(v):
+    fmt = "%Y-%m-%dT%H:%M:%S.%f%z" if "." in v else "%Y-%m-%dT%H:%M:%S%z"
+    return datetime.strptime(v, fmt)
+
+
+def _fmt(dt):
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+
+def _set_date(obj, body):
+    """Põe a tarefa noutro dia. Sem "time": mantém o horário (ou o dia inteiro) e a duração.
+    "time" "HH:MM" marca horário; "time" "" vira dia inteiro; "date" vazio tira a data."""
+    day = body.get("date")
+    if not day:
+        for k in ("startDate", "dueDate"):
+            obj.pop(k, None)
+        obj["isAllDay"] = False
+        obj["reminders"] = []
+        return
+    day = date.fromisoformat(day)
+    tz = ZoneInfo(obj.get("timeZone") or config.get()["fuso"])
+    start, due = (_parse(obj[k]) if obj.get(k) else None for k in ("startDate", "dueDate"))
+    start = start or due
+    dur = (due - start) if start and due else timedelta(0)
+    time = body.get("time")
+    if start and time is None:  # só o dia muda
+        local = start.astimezone(tz)
+        new = datetime.combine(day, local.time().replace(tzinfo=None)).replace(tzinfo=tz)
+    elif time:
+        h, m = (int(x) for x in time.split(":")[:2])
+        new = datetime.combine(day, datetime.min.time()).replace(hour=h, minute=m, tzinfo=tz)
+        if not start or obj.get("isAllDay"):
+            dur = timedelta(0)
+        obj["isAllDay"] = False
+    else:  # dia inteiro
+        new = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
+        if not start or not obj.get("isAllDay"):
+            dur = timedelta(0)
+        obj["isAllDay"] = True
+    obj["startDate"], obj["dueDate"] = _fmt(new), _fmt(new + dur)
+    obj.setdefault("timeZone", str(tz))
+
+
 def complete_task(body):
     if mode() == "api":
         return _api_complete(body)
@@ -275,6 +319,17 @@ def update_task(body):
         return
     obj = _full_task(body["id"], body["projectId"])
     _apply_edit(obj, body)
+    _save_task(obj)
+
+
+def date_task(body):
+    if mode() == "api":
+        obj = op("GET", f"/project/{body['projectId']}/task/{body['id']}")
+        _set_date(obj, body)
+        op("POST", f"/task/{body['id']}", obj)
+        return
+    obj = _full_task(body["id"], body["projectId"])
+    _set_date(obj, body)
     _save_task(obj)
 
 

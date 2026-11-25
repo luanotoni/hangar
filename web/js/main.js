@@ -1,4 +1,4 @@
-import { $, $$, state, api, toast, busy, ago, todayKey, esc, areaColor, applyTheme, themeSeeds } from "./core.js";
+import { $, $$, state, api, toast, busy, ago, todayKey, esc, areaColor, applyTheme, themeSeeds, shortDate } from "./core.js";
 import { renderHoje } from "./hoje.js";
 import { renderNoite, loadSession, bindNoite } from "./noite.js";
 import { renderAgenda, bindAgenda } from "./agenda.js";
@@ -99,6 +99,16 @@ async function update(body, btn, msg = "Salvo no TickTick.") {
   return busy(btn, async () => { await api("/api/task/update", body); toast(msg); await loadSrc("ticktick"); return true; });
 }
 
+/** Muda o dia (e, se vier, o horário: "" = dia inteiro) da tarefa; date vazio tira a data. */
+async function setDate(t, btn, date, time) {
+  const body = { id: t.id, projectId: t.projectId, date: date || "" }; if (time !== undefined) body.time = time;
+  return busy(btn, async () => {
+    await api("/api/task/date", body);
+    toast(date ? `Movida para ${shortDate(new Date(date + "T12:00"))} no TickTick.` : "Data tirada no TickTick.");
+    await loadSrc("ticktick"); return true;
+  });
+}
+
 function route() {
   const raw = location.hash.slice(1) || (state.cfgInfo && !state.cfgInfo.exists ? "ajustes" : "hoje");
   const v = raw === "sessao" ? "noite" : raw;
@@ -142,9 +152,9 @@ function bind() {
     const t = state.src.ticktick.data.tasks.find((x) => x.id === b.closest("[data-task]").dataset.task);
     complete({ id: t.id, projectId: t.projectId }, b);
   });
-  bindTarefa({ complete, postpone, update, changed: () => VIEWS[state.view]?.() });
+  bindTarefa({ complete, postpone, update, setDate, changed: () => VIEWS[state.view]?.() });
   bindNoite({ complete, checkin, postpone });
-  bindAgenda({ complete, postpone });
+  bindAgenda({ complete, postpone, setDate });
   bindTrabalho();
   bindAjustes({ save: saveConfig });
   bindFoco();

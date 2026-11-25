@@ -57,6 +57,7 @@ POSTS = {
     "/api/task/complete": _tt_write(ticktick.complete_task),
     "/api/task/postpone": _tt_write(ticktick.postpone_task),
     "/api/task/update": _tt_write(ticktick.update_task),
+    "/api/task/date": _tt_write(ticktick.date_task),
     "/api/habit/checkin": _tt_write(ticktick.checkin_habit),
     "/api/session": _save_session,
     "/api/pendencia/add": vault.pend_add,

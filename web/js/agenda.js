@@ -17,7 +17,9 @@ function passes(t) {
   if (F.q && !t.title.toLowerCase().includes(F.q.toLowerCase())) return false;
   return true;
 }
-const allTasks = () => tt()?.tasks || [];
+// Datas trocadas na tela esperando o TickTick: sobrevivem a um recarregamento em segundo plano.
+const pending = new Map();
+const allTasks = () => { const ts = tt()?.tasks || []; if (pending.size) ts.forEach((t) => { const o = pending.get(t.id); if (o) Object.assign(t, o); }); return ts; };
 const visible = () => allTasks().filter(passes);
 const tasksOn = (k, list = visible()) => list.filter((t) => taskDay(t) === k).sort(byTime);
 
@@ -36,7 +38,7 @@ function itemHTML(t, { compact = false, showDay = false } = {}) {
   const check = t.done
     ? `<span class="ag-check is-on" aria-hidden="true">${icon.check}</span>`
     : `<button type="button" class="ag-check" data-act="done" aria-label="Concluir ${esc(title)}" title="Concluir">${icon.check}</button>`;
-  return `<div class="ag-item${late ? " is-late" : ""}${t.done ? " is-done" : ""}${k ? ` is-${k}` : ""}${compact ? " is-compact" : ""}" data-task="${t.id}" style="--lc:${p.color}">
+  return `<div class="ag-item${late ? " is-late" : ""}${t.done ? " is-done" : ""}${k ? ` is-${k}` : ""}${compact ? " is-compact" : ""}" data-task="${t.id}"${t.done ? "" : ' draggable="true"'} style="--lc:${p.color}">
     ${check}<button type="button" class="ag-open" data-open-task="${t.id}" aria-haspopup="dialog"><span class="ag-title">${matTag(mat)}${badge(t)}<span>${esc(title)}</span></span>${meta ? `<span class="ag-meta">${meta}</span>` : ""}</button></div>`;
 }
 
@@ -110,12 +112,12 @@ function renderLista() {
     if (d.getMonth() !== mesAtual) { if (mesAtual >= 0 || late.length) groups.push(`<p class="ag-monthmark"><span>${MONTHS[d.getMonth()]}</span> <span class="num">${d.getFullYear()}</span></p>`); mesAtual = d.getMonth(); }
     else if (semana && semana !== dayKey(startOfWeek(d))) { const w = startOfWeek(d); groups.push(`<p class="ag-weekmark">semana de ${w.getDate()} de ${MONTHS[w.getMonth()]}</p>`); }
     semana = dayKey(startOfWeek(d));
-    groups.push(`<section class="ag-group${k === tk ? " is-today" : ""}${hot ? " is-hot" : ""}" id="ag-d-${k}">
+    groups.push(`<section class="ag-group${k === tk ? " is-today" : ""}${hot ? " is-hot" : ""}" id="ag-d-${k}" data-drop-day="${k}">
       <h2><span class="ag-gday">${n === 0 ? "Hoje" : n === 1 ? "Amanhã" : WD[d.getDay()]}</span><span class="ag-gdate num">${d.getDate()} de ${MONTHS[d.getMonth()]}</span>${hot ? `<span class="ag-kind is-prova">dia de ${esc(r.lp.one)}</span>` : ""}<span class="count num">${items.filter((t) => !t.done).length || ""}</span></h2>
       ${items.length ? items.map((t) => itemHTML(t)).join("") : `<p class="empty">Nada marcado.</p>`}</section>`);
   }
   const semData = list.filter((t) => !taskDay(t));
-  if (semData.length) groups.push(`<details class="ag-group ag-nodate"${pref("agendaSemData") ? " open" : ""}><summary><h2><span>Sem data</span><span class="count num">${semData.length}</span></h2></summary>${semData.map((t) => itemHTML(t)).join("")}</details>`);
+  if (semData.length) groups.push(`<details class="ag-group ag-nodate" data-drop-day=""${pref("agendaSemData") ? " open" : ""}><summary><h2><span>Sem data</span><span class="count num">${semData.length}</span></h2></summary>${semData.map((t) => itemHTML(t)).join("")}</details>`);
   $("#ag-lista").innerHTML = groups.join("") || `<p class="empty">Nada com esses filtros.</p>`;
 }
 
@@ -125,7 +127,7 @@ function renderWeek() {
     ? `<b class="num">${s.getDate()} a ${e.getDate()}</b> de ${MONTHS[s.getMonth()]}` : `<b class="num">${shortDate(s)} a ${shortDate(e)}</b>`;
   $("#week").innerHTML = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(s, i); const k = dayKey(d); const items = tasksOn(k, list); const hot = items.some((t) => kind(t) === "prova" && !t.done);
-    return `<div class="wday${i > 0 && d.getDate() === 1 ? " is-newmonth" : ""}${k === tk ? " is-today" : ""}${k < tk ? " is-past" : ""}${hot ? " is-hot" : ""}"><p class="wday-h"><span>${WDS[d.getDay()]}</span><b class="num">${d.getDate()}</b>${i === 0 || d.getDate() === 1 ? `<em class="wday-m">${MABBR[d.getMonth()]}</em>` : ""}${items.length ? `<small class="count num">${items.filter((t) => !t.done).length}</small>` : ""}</p>
+    return `<div data-drop-day="${k}" class="wday${i > 0 && d.getDate() === 1 ? " is-newmonth" : ""}${k === tk ? " is-today" : ""}${k < tk ? " is-past" : ""}${hot ? " is-hot" : ""}"><p class="wday-h"><span>${WDS[d.getDay()]}</span><b class="num">${d.getDate()}</b>${i === 0 || d.getDate() === 1 ? `<em class="wday-m">${MABBR[d.getMonth()]}</em>` : ""}${items.length ? `<small class="count num">${items.filter((t) => !t.done).length}</small>` : ""}</p>
       ${items.length ? items.map((t) => itemHTML(t, { compact: true })).join("") : `<p class="empty">${k < tk ? "Nada pendente" : "Livre"}</p>`}</div>`;
   }).join("");
 }
@@ -142,9 +144,9 @@ function renderMonth() {
     const d = addDays(s, i); const k = dayKey(d); const items = tasksOn(k, list);
     const prova = items.find((t) => kind(t) === "prova" && !t.done); const late = items.some((t) => isLate(t));
     const cls = ["mcell"]; if (d.getMonth() !== m) cls.push("is-out"); if (k === tk) cls.push("is-today"); if (prova) cls.push("is-hot"); if (k < tk) cls.push("is-past");
-    const shown = items.slice(0, 3).map((t) => `<span class="mitem${t.done ? " is-done" : ""}${kind(t) ? ` is-${kind(t)}` : ""}" style="--lc:${projectInfo(t.projectId).color}">${parts(t).mat ? `<b>${esc(parts(t).mat)}</b> ` : ""}${esc(parts(t).title)}</span>`).join("");
+    const shown = items.slice(0, 3).map((t) => `<span class="mitem${t.done ? " is-done" : ""}${kind(t) ? ` is-${kind(t)}` : ""}" data-task="${t.id}"${t.done ? "" : ' draggable="true"'} style="--lc:${projectInfo(t.projectId).color}">${parts(t).mat ? `<b>${esc(parts(t).mat)}</b> ` : ""}${esc(parts(t).title)}</span>`).join("");
     const more = items.length > 3 ? `<span class="mmore">mais ${items.length - 3}</span>` : "";
-    return `<button type="button" role="gridcell" class="${cls.join(" ")}" data-day="${k}" aria-selected="${k === a.selDay}" aria-label="${d.getDate()} de ${MONTHS[d.getMonth()]}, ${items.length} tarefas${prova ? `, dia de ${esc(rules().lp.one)}` : ""}"><span class="mcell-n num">${d.getDate()}${d.getDate() === 1 || (d.getMonth() !== m && i % 7 === 0) || (d.getMonth() !== m && i === weeks * 7 - 7) ? ` <em>${MABBR[d.getMonth()]}</em>` : ""}${late ? '<i class="mlate" aria-hidden="true"></i>' : ""}</span>${shown}${more}<span class="mcount num">${items.length || ""}</span></button>`;
+    return `<button type="button" role="gridcell" class="${cls.join(" ")}" data-day="${k}" data-drop-day="${k}" aria-selected="${k === a.selDay}" aria-label="${d.getDate()} de ${MONTHS[d.getMonth()]}, ${items.length} tarefas${prova ? `, dia de ${esc(rules().lp.one)}` : ""}"><span class="mcell-n num">${d.getDate()}${d.getDate() === 1 || (d.getMonth() !== m && i % 7 === 0) || (d.getMonth() !== m && i === weeks * 7 - 7) ? ` <em>${MABBR[d.getMonth()]}</em>` : ""}${late ? '<i class="mlate" aria-hidden="true"></i>' : ""}</span>${shown}${more}<span class="mcount num">${items.length || ""}</span></button>`;
   }).join("");
   $("#month").innerHTML = heads + cells;
   renderDay();
@@ -190,9 +192,44 @@ function step(n) {
   else { a.ref = n ? new Date(a.ref.getFullYear(), a.ref.getMonth() + n, 1) : new Date(); a.selDay = null; }
   renderAgenda();
 }
+/* ---------- arrastar para outro dia ---------- */
+// Muda na tela na hora (mesmo horário, outro dia) e desfaz se o TickTick recusar.
+const moveDays = (v, n) => (v ? new Date(new Date(v).getTime() + n * 86400000).toISOString() : v);
+function bindDrag(view, setDate) {
+  let dragId = null;
+  const clear = () => $$(".is-dragging, .is-drop", view).forEach((x) => x.classList.remove("is-dragging", "is-drop"));
+  view.addEventListener("dragstart", (e) => {
+    const it = e.target.closest?.("[draggable=true][data-task]"); if (!it) return;
+    dragId = it.dataset.task; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId);
+    requestAnimationFrame(() => it.classList.add("is-dragging"));
+  });
+  view.addEventListener("dragend", () => { dragId = null; clear(); });
+  view.addEventListener("dragover", (e) => {
+    const z = dragId && e.target.closest("[data-drop-day]"); if (!z) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    if (!z.classList.contains("is-drop")) { $$(".is-drop", view).forEach((x) => x.classList.remove("is-drop")); z.classList.add("is-drop"); }
+  });
+  view.addEventListener("dragleave", (e) => { const z = e.target.closest("[data-drop-day]"); if (z && !z.contains(e.relatedTarget)) z.classList.remove("is-drop"); });
+  view.addEventListener("drop", async (e) => {
+    const z = dragId && e.target.closest("[data-drop-day]"); if (!z) return;
+    e.preventDefault(); const id = dragId; dragId = null; clear();
+    const t = allTasks().find((x) => x.id === id); const day = z.dataset.dropDay; if (!t) return;
+    const from = taskDay(t); if ((from || "") === day) return;
+    const before = { start: t.start, due: t.due, allDay: t.allDay };
+    if (!day) Object.assign(t, { start: null, due: null, allDay: false });
+    else if (from) { const n = diffDays(day) - diffDays(from); Object.assign(t, { start: moveDays(t.start, n), due: moveDays(t.due, n) }); }
+    else { const iso = new Date(day + "T00:00").toISOString(); Object.assign(t, { start: iso, due: iso, allDay: true }); }
+    pending.set(t.id, { start: t.start, due: t.due, allDay: t.allDay });
+    if (day && state.agenda.scale === "mes") state.agenda.selDay = day;
+    renderAgenda();
+    const ok = await setDate(t, null, day); pending.delete(t.id);
+    if (!ok) { Object.assign(t, before); renderAgenda(); }
+  });
+}
+
 const toggle = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-export function bindAgenda({ complete, postpone }) {
+export function bindAgenda({ complete, postpone, setDate }) {
   const ESC = ["lista", "semana", "mes"];
   state.agenda.scale = [pref("agendaScale"), state.cfg?.agenda?.escala, "lista"].find((x) => ESC.includes(x));
   loadFilters();
@@ -217,6 +254,7 @@ export function bindAgenda({ complete, postpone }) {
     if (c && c.classList.contains("is-out")) { goto(c.dataset.day); return; }
     if (c) { state.agenda.selDay = c.dataset.day; $$(".mcell").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.day === state.agenda.selDay))); renderDay(); }
   });
+  bindDrag(view, setDate);
   view.addEventListener("input", (e) => { if (e.target.id === "ag-q") { F.q = e.target.value; renderAgenda(); } });
   view.addEventListener("change", (e) => { if (e.target.id === "ag-feitas") { F.feitas = e.target.checked; saveFilters(); renderAgenda(); } });
   view.addEventListener("toggle", (e) => { if (e.target.matches?.(".ag-nodate")) pref("agendaSemData", e.target.open); }, true);

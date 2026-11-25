@@ -1,5 +1,5 @@
 // Peças de tarefa compartilhadas pelas abas: leitura do título (código, prova/entrega) e o painel de detalhes.
-import { $, state, esc, md, WD, MONTHS, todayKey, taskDay, isLate, taskTime, projectInfo, tt, icon } from "./core.js";
+import { $, state, esc, md, WD, MONTHS, todayKey, taskDay, isLate, taskTime, projectInfo, tt, icon, toast } from "./core.js";
 
 /* ---------- regras (Ajustes → Agenda) ---------- */
 // Tudo o que decide "o que é prazo" vem da config; o servidor manda os padrões quando falta algo.
@@ -114,6 +114,13 @@ function renderDetail() {
     ${chips ? `<div class="drawer-chips">${chips}</div>` : ""}
     ${kindSeg}
     <p class="drawer-when${late ? " late" : ""}"><b>${esc(whenText(t))}</b>${k ? ` · ${t.done ? "feita" : late ? `atrasada ${rel(k)}` : rel(k)}` : ""}</p>
+    ${t.done ? "" : `<form class="drawer-date" data-date-form aria-label="Mudar a data">
+      <label>Dia<input type="date" name="date" value="${k || ""}" required></label>
+      <label>Hora<input type="time" name="time" value="${taskTime(t) || ""}"></label>
+      <button type="submit" class="btn btn-ghost btn-sm">Mudar data</button>
+      ${k ? `<button type="button" class="btn btn-text btn-sm" data-date-clear>Tirar data</button>` : ""}
+      <p class="muted small">Hora vazia = dia inteiro. Na agenda, também dá para arrastar a tarefa para outro dia.</p>
+    </form>`}
     ${cl.length ? `<section class="drawer-sec"><h3>Checklist <span class="count num">${t.itemsDone}/${t.items}</span></h3><ul class="drawer-cl">${cl.map((i) => `<li class="${i.done ? "is-on" : ""}">${i.done ? icon.check : "<i></i>"}<span>${esc(i.title)}</span></li>`).join("")}</ul></section>` : ""}
     ${editing ? "" : t.content ? `<section class="drawer-sec"><h3>Notas</h3><div class="drawer-md">${md(t.content)}</div></section>`
       : `<button type="button" class="drawer-add-note" data-edit>+ Adicionar notas</button>`}
@@ -161,13 +168,24 @@ async function saveEdit(t, form) {
 }
 
 /** Liga o painel: concluir, adiar, fechar, ações extras e qualquer [data-open-task] da página. */
-export function bindTarefa({ complete, postpone, update, changed }) {
+export function bindTarefa({ complete, postpone, update, setDate, changed }) {
   api = { update, changed };
   const d = dlg();
   const cur = () => (tt()?.tasks || []).find((x) => x.id === openId);
   d.addEventListener("close", () => { const back = document.querySelector(`[data-open-task="${openId}"]`); openId = null; editing = false; back?.focus(); });
   d.addEventListener("cancel", (e) => { if (editing) { e.preventDefault(); setEditing(false); } }); // Esc sai da edição antes de fechar
-  d.addEventListener("submit", (e) => { const f = e.target.closest("[data-edit-form]"); if (!f) return; e.preventDefault(); const t = cur(); if (t) saveEdit(t, f); });
+  d.addEventListener("submit", (e) => {
+    const df = e.target.closest("[data-date-form]");
+    if (df) {
+      e.preventDefault(); const t = cur(); if (!t) return;
+      const f = new FormData(df); const day = String(f.get("date") || ""); const time = String(f.get("time") || "");
+      if (!day) return;
+      if (day === taskDay(t) && time === (taskTime(t) || "") && (time || t.allDay)) { toast("A data já é essa."); return; }
+      setDate(t, df.querySelector("[type=submit]"), day, time);
+      return;
+    }
+    const f = e.target.closest("[data-edit-form]"); if (!f) return; e.preventDefault(); const t = cur(); if (t) saveEdit(t, f);
+  });
   d.addEventListener("keydown", (e) => {
     if (editing && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); d.querySelector("[data-edit-form]")?.requestSubmit(); }
     else if (!editing && (e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest("input, textarea")) { e.preventDefault(); setEditing(true); }
@@ -176,6 +194,7 @@ export function bindTarefa({ complete, postpone, update, changed }) {
     if (e.target === d || e.target.closest("[data-close]")) { d.close(); return; } // fundo ou X
     if (e.target.closest("[data-edit]")) { setEditing(true); return; }
     if (e.target.closest("[data-edit-cancel]")) { setEditing(false); return; }
+    const dc = e.target.closest("[data-date-clear]"); if (dc) { const t = cur(); if (t) await setDate(t, dc, ""); return; }
     const kb = e.target.closest("button[data-kind]");
     if (kb) { const t = cur(); if (t && kb.getAttribute("aria-checked") !== "true") await setKind(t, kb.dataset.kind, kb); return; }
     const btn = e.target.closest("button[data-act]"); if (!btn) return;
