@@ -20,7 +20,7 @@ FIELDS = {"2": "id", "1": "name", "12": "status", "15": "date", "17": "solvedate
 
 
 def _env():
-    env = {k: config.secret(k) for k in config.SECRET_KEYS}
+    env = {k: config.secret(k) for k in config.SECRET_KEYS if k.startswith("HANGAR_GLPI_")}
     if not all(env.values()):
         raise SourceError("Faltam a URL ou os tokens do GLPI. Preencha em Ajustes → GLPI.")
     return env

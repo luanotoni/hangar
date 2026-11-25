@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from . import paths
 
 
+RETRY_AFTER = 60  # segundos entre tentativas automáticas quando a fonte está vencida
+
+
 class SourceError(Exception):
     """Erro com mensagem pronta para mostrar na página."""
 
@@ -21,6 +24,7 @@ class Source:
         self.name, self.fetch, self.ttl = name, fetch, ttl
         self.file = paths.CACHE / f"{name}.json"
         self.data, self.at, self.error = None, 0.0, None
+        self.tried = 0.0  # última tentativa, com ou sem sucesso: evita refazer a cada pedido quando falha
         self._lock = threading.Lock()
         self._refreshing = threading.Event()
         try:
@@ -49,6 +53,7 @@ class Source:
         if self._refreshing.is_set():
             return
         self._refreshing.set()
+        self.tried = time.time()
         threading.Thread(target=self._refresh, daemon=True, name=f"refresh-{self.name}").start()
 
     def refresh_now(self, timeout=60):
@@ -56,6 +61,7 @@ class Source:
             self._wait(timeout)
             return
         self._refreshing.set()
+        self.tried = time.time()
         self._refresh()
 
     def _wait(self, timeout):
@@ -64,14 +70,14 @@ class Source:
             time.sleep(0.05)
 
     def invalidate(self):
-        self.at = 0.0
+        self.at = self.tried = 0.0
 
     def get(self, force=False):
         if force:
             self.refresh_now()
         elif self.data is None:
             self.refresh_now()
-        elif time.time() - self.at > self.ttl:
+        elif time.time() - self.at > self.ttl and time.time() - self.tried > RETRY_AFTER:
             self.refresh_async()
         return self.payload()
 
