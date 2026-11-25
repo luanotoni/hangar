@@ -31,8 +31,14 @@ code { font-size: 0.9em; background: var(--color-paper-3); padding: 0 4px; borde
 .shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
 .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: var(--space-xl); padding: var(--space-lg) var(--space-md); border-right: 1px solid var(--color-rule); background: var(--color-side); }
 .mark { display: inline-flex; align-items: center; gap: var(--space-sm); font-family: var(--font-display); font-weight: 700; font-size: var(--text-xl); letter-spacing: 0.02em; color: var(--color-ink); text-decoration: none; padding-inline: var(--space-xs); }
-.beacon { width: 12px; height: 12px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 22%, transparent), 0 0 18px color-mix(in oklab, var(--color-accent) 55%, transparent); animation: pulse 3.2s var(--ease-in-out) infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 0 7px color-mix(in oklab, var(--color-accent) 8%, transparent), 0 0 24px color-mix(in oklab, var(--color-accent) 35%, transparent); } }
+.mark-logo { width: 34px; height: 37px; flex: none; overflow: visible; }
+.mark-logo path { fill: none; }
+.mark-logo .mark-arch { stroke: var(--color-field); stroke-width: 5.5; stroke-linecap: round; }
+.mark-logo .mark-a { fill: var(--color-accent); }
+.mark-logo .mark-b { fill: color-mix(in oklab, var(--color-accent) 65%, white); }
+.mark-logo .mark-lane { stroke: var(--color-ink); stroke-width: 4; stroke-linecap: round; }
+.mark-ship { transition: transform var(--dur-short) var(--ease-out); }
+.mark:hover .mark-ship { transform: translateY(-3px); }
 .nav { display: grid; gap: 2px; }
 .nav a { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: var(--space-sm); min-height: 42px; padding-inline: var(--space-sm); border-radius: 8px; color: var(--color-muted); text-decoration: none; font-weight: 700; font-size: var(--text-sm); position: relative; transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out); }
 .nav a svg { width: 20px; height: 20px; }
@@ -485,12 +491,6 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 .idd-confirm p { flex-basis: 100%; font-size: var(--text-sm); color: var(--color-ink); }
 .btn-danger-solid { background: var(--color-error); color: var(--color-paper); }
 .btn-danger-solid:hover { background: color-mix(in oklch, var(--color-error) 85%, white); }
-
-/* ---------- responsivo ---------- */
-@media (max-width: 90rem) {
-  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .trab-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 /* fechar ideia quando o card fica pronto */
 .tag-done { display: inline-flex; align-items: center; gap: 3px; color: var(--color-success, var(--color-field)); border-color: color-mix(in oklch, var(--color-success, var(--color-field)) 45%, transparent); }
 .tag-done svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.2; }
@@ -500,6 +500,12 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 .idd-cstate { display: inline-block; min-width: 5.5rem; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-muted); }
 .idd-cards .is-closed .idd-cstate, .idd-cards .is-merged .idd-cstate { color: var(--color-success, var(--color-field)); }
 .idd-cards .is-open .idd-cstate { color: var(--color-warn, var(--color-ink-2)); }
+
+/* ---------- responsivo ---------- */
+@media (max-width: 90rem) {
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .trab-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 72rem) {
   .ag-radar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ag-prazos { grid-column: 1 / -1; }

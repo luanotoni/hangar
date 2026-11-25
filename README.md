@@ -1,3 +1,5 @@
+<img src="web/logo.svg" alt="" width="88">
+
 # Hangar
 
 Hub local do dia, em português, que roda na sua máquina (http://127.0.0.1:8023/) e junta:
