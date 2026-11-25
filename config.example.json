@@ -129,6 +129,7 @@
         "rotulo": "Onboarding",
         "foco": "facilitar a entrada de gente nova no time"
       }
-    ]
+    ],
+    "mostrar_descartadas": false
   }
 }

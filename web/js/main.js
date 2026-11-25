@@ -3,7 +3,7 @@ import { renderHoje } from "./hoje.js";
 import { renderNoite, loadSession, bindNoite } from "./noite.js";
 import { renderAgenda, bindAgenda } from "./agenda.js";
 import { renderTrabalho, bindTrabalho } from "./trabalho.js";
-import { renderIdeias, bindIdeias } from "./ideias.js";
+import { renderIdeias, bindIdeias, ideaOpen } from "./ideias.js";
 import { renderAjustes, bindAjustes } from "./ajustes.js";
 import { renderFoco, bindFoco, loadFoco } from "./foco.js";
 import { bindTarefa, refreshTask, taskOpen } from "./tarefa.js";
@@ -149,11 +149,11 @@ function bind() {
   bindAjustes({ save: saveConfig });
   bindFoco();
   bindIdeias({
-    move: (id, stage, btn) => busy(btn, async () => { await api("/api/ideia/move", { id, stage }); await loadVault(); }),
     ask: (foco, btn) => busy(btn, async () => { await api("/api/ideias/gerar", { foco }); await loadAll(); }),
+    reload: loadVault,
   });
   document.addEventListener("keydown", (e) => {
-    if (taskOpen() || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select")) return;
+    if (taskOpen() || ideaOpen() || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select")) return;
     const views = ORDER.filter((v) => VIEWS[v]);
     if (/^[1-9]$/.test(e.key) && views[Number(e.key) - 1]) { location.hash = views[Number(e.key) - 1]; }
     else if (e.key === "r" || e.key === "R") { $("#sync-btn").click(); }

@@ -102,6 +102,7 @@ const SCHEMA = [
     ["ideias.areas", "Áreas das ideias", "lines", ""],
     ["ideias.foco_padrao", "Foco padrão", "text", ""],
     ["ideias.focos", "Focos prontos", "focos", "Um por linha: Rótulo | foco completo."],
+    ["ideias.mostrar_descartadas", "Mostrar as descartadas no quadro", "bool", "Padrão da aba Ideias. O que você marcar lá fica lembrado neste navegador."],
   ]],
 ];
 

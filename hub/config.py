@@ -119,6 +119,7 @@ DEFAULTS = {
         "areas": ["Produto", "Processo", "Infra", "Time"],
         "foco_padrao": "melhorias gerais no meu trabalho",
         "focos": [],  # [{"rotulo": "...", "foco": "..."}]
+        "mostrar_descartadas": False,  # padrão do quadro; o que você marcar na aba fica lembrado no navegador
     },
 }
 
